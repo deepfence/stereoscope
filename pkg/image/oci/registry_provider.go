@@ -2,7 +2,6 @@ package oci
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 
@@ -48,7 +47,9 @@ func (p *RegistryImageProvider) Provide(ctx context.Context, userMetadata ...ima
 		return nil, fmt.Errorf("unable to parse registry reference=%q: %+v", p.imageStr, err)
 	}
 
-	descriptor, err := remote.Get(ref, prepareRemoteOptions(ctx, ref, p.registryOptions, p.platform)...)
+	options := prepareRemoteOptions(ctx, ref, p.registryOptions, p.platform)
+
+	descriptor, err := remote.Get(ref, options...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get image descriptor from registry: %+v", err)
 	}
@@ -95,14 +96,6 @@ func prepareReferenceOptions(registryOptions image.RegistryOptions) []name.Optio
 func prepareRemoteOptions(ctx context.Context, ref name.Reference, registryOptions image.RegistryOptions, p *image.Platform) (options []remote.Option) {
 	options = append(options, remote.WithContext(ctx))
 
-	if registryOptions.InsecureSkipTLSVerify {
-		t := &http.Transport{
-			//nolint: gosec
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-		options = append(options, remote.WithTransport(t))
-	}
-
 	if p != nil {
 		options = append(options, remote.WithPlatform(containerregistryV1.Platform{
 			Architecture: p.Architecture,
@@ -111,10 +104,13 @@ func prepareRemoteOptions(ctx context.Context, ref name.Reference, registryOptio
 		}))
 	}
 
+	registryName := ref.Context().RegistryStr()
+
 	// note: the authn.Authenticator and authn.Keychain options are mutually exclusive, only one may be provided.
-	// If no explicit authenticator can be found, check if explicit Keychain has
-	// been provided, and if not, then fallback to the default keychain.
-	authenticator := registryOptions.Authenticator(ref.Context().RegistryStr())
+	// If no explicit authenticator can be found, check if explicit Keychain has been provided, and if not, then
+	// fallback to the default keychain. With the authenticator also comes the option to configure TLS transport.
+	authenticator := registryOptions.Authenticator(registryName)
+
 	switch {
 	case authenticator != nil:
 		options = append(options, remote.WithAuth(authenticator))
@@ -122,8 +118,17 @@ func prepareRemoteOptions(ctx context.Context, ref name.Reference, registryOptio
 		options = append(options, remote.WithAuthFromKeychain(registryOptions.Keychain))
 	default:
 		// use the Keychain specified from a docker config file.
-		log.Debugf("no registry credentials configured, using the default keychain")
+		log.Debugf("no registry credentials configured for %q, using the default keychain", registryName)
 		options = append(options, remote.WithAuthFromKeychain(authn.DefaultKeychain))
+	}
+
+	tlsConfig, err := registryOptions.TLSConfig(registryName)
+	if err != nil {
+		log.Warn("unable to configure TLS transport: %w", err)
+	} else if tlsConfig != nil {
+		options = append(options, remote.WithTransport(&http.Transport{
+			TLSClientConfig: tlsConfig,
+		}))
 	}
 
 	return options

@@ -31,14 +31,16 @@ import (
 
 // DaemonImageProvider is a image.Provider capable of fetching and representing a docker image from the docker daemon API.
 type DaemonImageProvider struct {
-	imageStr  string
-	tmpDirGen *file.TempDirGenerator
-	client    client.APIClient
-	platform  *image.Platform
+	imageStr         string
+	originalImageRef string
+	tmpDirGen        *file.TempDirGenerator
+	client           client.APIClient
+	platform         *image.Platform
 }
 
 // NewProviderFromDaemon creates a new provider instance for a specific image that will later be cached to the given directory.
 func NewProviderFromDaemon(imgStr string, tmpDirGen *file.TempDirGenerator, c client.APIClient, platform *image.Platform) (*DaemonImageProvider, error) {
+	var originalRef string
 	ref, err := name.ParseReference(imgStr, name.WithDefaultRegistry(""))
 	if err != nil {
 		return nil, err
@@ -46,19 +48,21 @@ func NewProviderFromDaemon(imgStr string, tmpDirGen *file.TempDirGenerator, c cl
 	tag, ok := ref.(name.Tag)
 	if ok {
 		imgStr = tag.Name()
+		originalRef = tag.String() // blindly takes the original input passed into Tag
 	}
 	return &DaemonImageProvider{
-		imageStr:  imgStr,
-		tmpDirGen: tmpDirGen,
-		client:    c,
-		platform:  platform,
+		imageStr:         imgStr,
+		originalImageRef: originalRef,
+		tmpDirGen:        tmpDirGen,
+		client:           c,
+		platform:         platform,
 	}, nil
 }
 
 type daemonProvideProgress struct {
 	SaveProgress *progress.TimedProgress
 	CopyProgress *progress.Writer
-	Stage        *progress.Stage
+	Stage        *progress.AtomicStage
 }
 
 func (p *DaemonImageProvider) trackSaveProgress() (*daemonProvideProgress, error) {
@@ -82,7 +86,7 @@ func (p *DaemonImageProvider) trackSaveProgress() (*daemonProvideProgress, error
 	aggregateProgress := progress.NewAggregator(progress.NormalizeStrategy, estimateSaveProgress, copyProgress)
 
 	// let consumers know of a monitorable event (image save + copy stages)
-	stage := &progress.Stage{}
+	stage := progress.NewAtomicStage("")
 
 	bus.Publish(partybus.Event{
 		Type:   event.FetchImage,
@@ -107,7 +111,7 @@ func (p *DaemonImageProvider) trackSaveProgress() (*daemonProvideProgress, error
 func (p *DaemonImageProvider) pull(ctx context.Context) error {
 	log.Debugf("pulling docker image=%q", p.imageStr)
 
-	var status = newPullStatus()
+	status := newPullStatus()
 	defer func() {
 		status.complete = true
 	}()
@@ -152,7 +156,7 @@ func (p *DaemonImageProvider) pull(ctx context.Context) error {
 }
 
 func (p *DaemonImageProvider) pullOptions() (types.ImagePullOptions, error) {
-	var options = types.ImagePullOptions{
+	options := types.ImagePullOptions{
 		Platform: p.platform.String(),
 	}
 
@@ -279,7 +283,7 @@ func (p *DaemonImageProvider) saveImage(ctx context.Context) (string, error) {
 		}
 	}()
 
-	providerProgress.Stage.Current = "requesting image from docker"
+	providerProgress.Stage.Set("requesting image from docker")
 	readCloser, err := p.client.ImageSave(ctx, []string{p.imageStr})
 	if err != nil {
 		return "", fmt.Errorf("unable to save image tar: %w", err)
@@ -300,7 +304,7 @@ func (p *DaemonImageProvider) saveImage(ctx context.Context) (string, error) {
 
 	// save the image contents to the temp file
 	// note: this is the same image that will be used to querying image content during analysis
-	providerProgress.Stage.Current = "saving image to disk"
+	providerProgress.Stage.Set("saving image to disk")
 	nBytes, err := io.Copy(io.MultiWriter(tempTarFile, providerProgress.CopyProgress), readCloser)
 	if err != nil {
 		return "", fmt.Errorf("unable to save image to tar: %w", err)
@@ -315,6 +319,12 @@ func (p *DaemonImageProvider) pullImageIfMissing(ctx context.Context) error {
 	// check if the image exists locally
 	inspectResult, _, err := p.client.ImageInspectWithRaw(ctx, p.imageStr)
 	if err != nil {
+		inspectResult, _, err = p.client.ImageInspectWithRaw(ctx, p.originalImageRef)
+		if err == nil {
+			p.imageStr = strings.TrimSuffix(p.imageStr, ":latest")
+		}
+	}
+	if err != nil {
 		if client.IsErrNotFound(err) {
 			if err = p.pull(ctx); err != nil {
 				return err
@@ -324,7 +334,7 @@ func (p *DaemonImageProvider) pullImageIfMissing(ctx context.Context) error {
 		}
 	} else {
 		// looks like the image exists, but if the platform doesn't match what the user specified, we may need to
-		// pull the image again with the correct platofmr specifier, which will override the local tag.
+		// pull the image again with the correct platform specifier, which will override the local tag.
 		if err := p.validatePlatform(inspectResult); err != nil {
 			if err = p.pull(ctx); err != nil {
 				return err

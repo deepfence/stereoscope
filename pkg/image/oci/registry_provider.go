@@ -2,8 +2,10 @@ package oci
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
+	"runtime"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -15,26 +17,32 @@ import (
 	"github.com/anchore/stereoscope/pkg/image"
 )
 
-// RegistryImageProvider is an image.Provider capable of fetching and representing a container image fetched from a remote registry (described by the OCI distribution spec).
-type RegistryImageProvider struct {
-	imageStr        string
-	tmpDirGen       *file.TempDirGenerator
-	registryOptions image.RegistryOptions
-	platform        *image.Platform
-}
+const Registry image.Source = image.OciRegistrySource
 
-// NewProviderFromRegistry creates a new provider instance for a specific image that will later be cached to the given directory.
-func NewProviderFromRegistry(imgStr string, tmpDirGen *file.TempDirGenerator, registryOptions image.RegistryOptions, platform *image.Platform) *RegistryImageProvider {
-	return &RegistryImageProvider{
-		imageStr:        imgStr,
+// NewRegistryProvider creates a new provider instance for a specific image that will later be cached to the given directory.
+func NewRegistryProvider(tmpDirGen *file.TempDirGenerator, registryOptions image.RegistryOptions, imageStr string, platform *image.Platform) image.Provider {
+	return &registryImageProvider{
 		tmpDirGen:       tmpDirGen,
-		registryOptions: registryOptions,
+		imageStr:        imageStr,
 		platform:        platform,
+		registryOptions: registryOptions,
 	}
 }
 
+// registryImageProvider is an image.Provider capable of fetching and representing a container image fetched from a remote registry (described by the OCI distribution spec).
+type registryImageProvider struct {
+	tmpDirGen       *file.TempDirGenerator
+	imageStr        string
+	platform        *image.Platform
+	registryOptions image.RegistryOptions
+}
+
+func (p *registryImageProvider) Name() string {
+	return Registry
+}
+
 // Provide an image object that represents the cached docker image tar fetched a registry.
-func (p *RegistryImageProvider) Provide(ctx context.Context, userMetadata ...image.AdditionalMetadata) (*image.Image, error) {
+func (p *registryImageProvider) Provide(ctx context.Context) (*image.Image, error) {
 	log.Debugf("pulling image info directly from registry image=%q", p.imageStr)
 
 	imageTempDir, err := p.tmpDirGen.NewDirectory("oci-registry-image")
@@ -47,7 +55,9 @@ func (p *RegistryImageProvider) Provide(ctx context.Context, userMetadata ...ima
 		return nil, fmt.Errorf("unable to parse registry reference=%q: %+v", p.imageStr, err)
 	}
 
-	options := prepareRemoteOptions(ctx, ref, p.registryOptions, p.platform)
+	platform := defaultPlatformIfNil(p.platform)
+
+	options := prepareRemoteOptions(ctx, ref, p.registryOptions, platform)
 
 	descriptor, err := remote.Get(ref, options...)
 	if err != nil {
@@ -72,17 +82,19 @@ func (p *RegistryImageProvider) Provide(ctx context.Context, userMetadata ...ima
 		metadata = append(metadata, image.WithManifest(manifestBytes))
 	}
 
-	if p.platform != nil {
+	if platform != nil {
 		metadata = append(metadata,
-			image.WithArchitecture(p.platform.Architecture, p.platform.Variant),
-			image.WithOS(p.platform.OS),
+			image.WithArchitecture(platform.Architecture, platform.Variant),
+			image.WithOS(platform.OS),
 		)
 	}
 
-	// apply user-supplied metadata last to override any default behavior
-	metadata = append(metadata, userMetadata...)
-
-	return image.New(img, p.tmpDirGen, imageTempDir, metadata...), nil
+	out := image.New(img, p.tmpDirGen, imageTempDir, metadata...)
+	err = out.Read()
+	if err != nil {
+		return nil, err
+	}
+	return out, err
 }
 
 func prepareReferenceOptions(registryOptions image.RegistryOptions) []name.Option {
@@ -126,10 +138,31 @@ func prepareRemoteOptions(ctx context.Context, ref name.Reference, registryOptio
 	if err != nil {
 		log.Warn("unable to configure TLS transport: %w", err)
 	} else if tlsConfig != nil {
-		options = append(options, remote.WithTransport(&http.Transport{
-			TLSClientConfig: tlsConfig,
-		}))
+		options = append(options, remote.WithTransport(getTransport(tlsConfig)))
 	}
 
 	return options
+}
+
+func getTransport(tlsConfig *tls.Config) *http.Transport {
+	// use the default transport to inherit existing default options (including proxy options)
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = tlsConfig
+	return transport
+}
+
+// defaultPlatformIfNil sets the platform to use the host's architecture
+// if no platform was specified. The OCI registry NewProvider uses "linux/amd64"
+// as a hard-coded default platform, which has surprised customers
+// running stereoscope on non-amd64 hosts. If platform is already
+// set on the config, or the code can't generate a matching platform,
+// do nothing.
+func defaultPlatformIfNil(platform *image.Platform) *image.Platform {
+	if platform == nil {
+		p, err := image.NewPlatform(fmt.Sprintf("linux/%s", runtime.GOARCH))
+		if err == nil {
+			return p
+		}
+	}
+	return platform
 }

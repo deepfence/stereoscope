@@ -9,6 +9,7 @@ import (
 	"github.com/sylabs/sif/v2/pkg/sif"
 
 	"github.com/anchore/stereoscope/pkg/file"
+	"github.com/anchore/stereoscope/pkg/pathfilter"
 )
 
 func TestSingularityImageProvider_Provide(t *testing.T) {
@@ -33,7 +34,7 @@ func TestSingularityImageProvider_Provide(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := NewArchiveProvider(file.NewTempDirGenerator(""), tt.path)
+			p := NewArchiveProvider(file.NewTempDirGenerator(""), tt.path, pathfilter.DefaultPathFilterFunc)
 
 			i, err := p.Provide(context.Background())
 			t.Cleanup(func() { _ = i.Cleanup() })

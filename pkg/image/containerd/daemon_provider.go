@@ -30,12 +30,13 @@ import (
 	"github.com/anchore/stereoscope/pkg/file"
 	"github.com/anchore/stereoscope/pkg/image"
 	stereoscopeDocker "github.com/anchore/stereoscope/pkg/image/docker"
+	"github.com/anchore/stereoscope/pkg/pathfilter"
 )
 
 const Daemon image.Source = image.ContainerdDaemonSource
 
 // NewDaemonProvider creates a new provider instance for a specific image that will later be cached to the given directory.
-func NewDaemonProvider(tmpDirGen *file.TempDirGenerator, registryOptions image.RegistryOptions, namespace string, imageStr string, platform *image.Platform) image.Provider {
+func NewDaemonProvider(tmpDirGen *file.TempDirGenerator, registryOptions image.RegistryOptions, namespace string, imageStr string, platform *image.Platform, pathFilterFunc pathfilter.PathFilterFunc) image.Provider {
 	if namespace == "" {
 		namespace = namespaces.Default
 	}
@@ -46,6 +47,7 @@ func NewDaemonProvider(tmpDirGen *file.TempDirGenerator, registryOptions image.R
 		platform:        platform,
 		namespace:       namespace,
 		registryOptions: registryOptions,
+		pathFilterFunc:  pathFilterFunc,
 	}
 }
 
@@ -58,6 +60,7 @@ type daemonImageProvider struct {
 	platform        *image.Platform
 	namespace       string
 	registryOptions image.RegistryOptions
+	pathFilterFunc  pathfilter.PathFilterFunc
 }
 
 func (p *daemonImageProvider) Name() string {
@@ -95,7 +98,7 @@ func (p *daemonImageProvider) Provide(ctx context.Context) (*image.Image, error)
 	}
 
 	// use the existing tarball provider to process what was pulled from the containerd daemon
-	return stereoscopeDocker.NewArchiveProvider(p.tmpDirGen, tarFileName, withMetadata(resolvedPlatform, p.imageStr)...).
+	return stereoscopeDocker.NewArchiveProvider(p.tmpDirGen, tarFileName, p.pathFilterFunc, withMetadata(resolvedPlatform, p.imageStr)...).
 		Provide(ctx)
 }
 

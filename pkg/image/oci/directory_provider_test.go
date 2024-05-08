@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/anchore/stereoscope/pkg/file"
+	"github.com/anchore/stereoscope/pkg/pathfilter"
 )
 
 func Test_NewProviderFromPath(t *testing.T) {
@@ -16,7 +17,7 @@ func Test_NewProviderFromPath(t *testing.T) {
 	defer generator.Cleanup()
 
 	//WHEN
-	provider := NewDirectoryProvider(&generator, path).(*directoryImageProvider)
+	provider := NewDirectoryProvider(&generator, path, pathfilter.DefaultPathFilterFunc).(*directoryImageProvider)
 
 	//THEN
 	assert.NotNil(t, provider.path)
@@ -41,7 +42,7 @@ func Test_Directory_Provider(t *testing.T) {
 	defer tmpDirGen.Cleanup()
 
 	for _, tc := range tests {
-		provider := NewDirectoryProvider(tmpDirGen, tc.path)
+		provider := NewDirectoryProvider(tmpDirGen, tc.path, pathfilter.DefaultPathFilterFunc)
 		t.Run(tc.name, func(t *testing.T) {
 			//WHEN
 			image, err := provider.Provide(context.Background())

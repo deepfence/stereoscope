@@ -7,23 +7,26 @@ import (
 
 	"github.com/anchore/stereoscope/pkg/file"
 	"github.com/anchore/stereoscope/pkg/image"
+	"github.com/anchore/stereoscope/pkg/pathfilter"
 )
 
 const ProviderName = image.SingularitySource
 
 // NewArchiveProvider creates a new provider instance for the Singularity Image Format (SIF) image
 // at path.
-func NewArchiveProvider(tmpDirGen *file.TempDirGenerator, path string) image.Provider {
+func NewArchiveProvider(tmpDirGen *file.TempDirGenerator, path string, pathFilterFunc pathfilter.PathFilterFunc) image.Provider {
 	return &singularityImageProvider{
-		tmpDirGen: tmpDirGen,
-		path:      path,
+		tmpDirGen:      tmpDirGen,
+		path:           path,
+		pathFilterFunc: pathFilterFunc,
 	}
 }
 
 // singularityImageProvider is an image.Provider for a Singularity Image Format (SIF) image.
 type singularityImageProvider struct {
-	tmpDirGen *file.TempDirGenerator
-	path      string
+	tmpDirGen      *file.TempDirGenerator
+	path           string
+	pathFilterFunc pathfilter.PathFilterFunc
 }
 
 func (p *singularityImageProvider) Name() string {

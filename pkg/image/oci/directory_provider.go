@@ -9,26 +9,34 @@ import (
 
 	"github.com/anchore/stereoscope/pkg/file"
 	"github.com/anchore/stereoscope/pkg/image"
+	"github.com/anchore/stereoscope/pkg/pathfilter"
 )
 
 const Directory image.Source = image.OciDirectorySource
 
 // NewDirectoryProvider creates a new provider instance for the specific image already at the given path.
-func NewDirectoryProvider(tmpDirGen *file.TempDirGenerator, path string) image.Provider {
+func NewDirectoryProvider(tmpDirGen *file.TempDirGenerator, path string, pathFilterFunc pathfilter.PathFilterFunc) image.Provider {
 	return &directoryImageProvider{
-		tmpDirGen: tmpDirGen,
-		path:      path,
+		tmpDirGen:      tmpDirGen,
+		path:           path,
+		pathFilterFunc: pathFilterFunc,
 	}
 }
 
 // directoryImageProvider is an image.Provider for an OCI image (V1) for an existing tar on disk (from a buildah push <img> oci:<img> command).
 type directoryImageProvider struct {
-	tmpDirGen *file.TempDirGenerator
-	path      string
+	tmpDirGen      *file.TempDirGenerator
+	path           string
+	pathFilterFunc pathfilter.PathFilterFunc
 }
 
 func (p *directoryImageProvider) Name() string {
 	return Directory
+}
+
+func (p *directoryImageProvider) WithPathFilterFunc(fn pathfilter.PathFilterFunc) *directoryImageProvider {
+	p.pathFilterFunc = fn
+	return p
 }
 
 // Provide an image object that represents the OCI image as a directory.

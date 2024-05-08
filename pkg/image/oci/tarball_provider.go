@@ -7,22 +7,25 @@ import (
 
 	"github.com/anchore/stereoscope/pkg/file"
 	"github.com/anchore/stereoscope/pkg/image"
+	"github.com/anchore/stereoscope/pkg/pathfilter"
 )
 
 const Archive image.Source = image.OciTarballSource
 
 // NewArchiveProvider creates a new provider instance for the specific image tarball already at the given path.
-func NewArchiveProvider(tmpDirGen *file.TempDirGenerator, path string) image.Provider {
+func NewArchiveProvider(tmpDirGen *file.TempDirGenerator, path string, pathFilterFunc pathfilter.PathFilterFunc) image.Provider {
 	return &tarballImageProvider{
-		tmpDirGen: tmpDirGen,
-		path:      path,
+		tmpDirGen:      tmpDirGen,
+		path:           path,
+		pathFilterFunc: pathFilterFunc,
 	}
 }
 
 // tarballImageProvider is an image.Provider for an OCI image (V1) for an existing tar on disk (from a buildah push <img> oci-archive:<name>.tar command).
 type tarballImageProvider struct {
-	tmpDirGen *file.TempDirGenerator
-	path      string
+	tmpDirGen      *file.TempDirGenerator
+	path           string
+	pathFilterFunc pathfilter.PathFilterFunc
 }
 
 func (p *tarballImageProvider) Name() string {
@@ -47,5 +50,5 @@ func (p *tarballImageProvider) Provide(ctx context.Context) (*image.Image, error
 		return nil, err
 	}
 
-	return NewDirectoryProvider(p.tmpDirGen, tempDir).Provide(ctx)
+	return NewDirectoryProvider(p.tmpDirGen, tempDir, p.pathFilterFunc).Provide(ctx)
 }

@@ -11,16 +11,18 @@ import (
 	"github.com/anchore/stereoscope/internal/log"
 	"github.com/anchore/stereoscope/pkg/file"
 	"github.com/anchore/stereoscope/pkg/image"
+	"github.com/anchore/stereoscope/pkg/pathfilter"
 )
 
 const Archive image.Source = image.DockerTarballSource
 
 // NewArchiveProvider creates a new provider able to resolve docker tarball archives
-func NewArchiveProvider(tmpDirGen *file.TempDirGenerator, path string, additionalMetadata ...image.AdditionalMetadata) image.Provider {
+func NewArchiveProvider(tmpDirGen *file.TempDirGenerator, path string, pathFilterFunc pathfilter.PathFilterFunc, additionalMetadata ...image.AdditionalMetadata) image.Provider {
 	return &tarballImageProvider{
 		tmpDirGen:          tmpDirGen,
 		path:               path,
 		additionalMetadata: additionalMetadata,
+		pathFilterFunc:     pathFilterFunc,
 	}
 }
 
@@ -31,6 +33,7 @@ type tarballImageProvider struct {
 	tmpDirGen          *file.TempDirGenerator
 	path               string
 	additionalMetadata []image.AdditionalMetadata
+	pathFilterFunc     pathfilter.PathFilterFunc
 }
 
 func (p *tarballImageProvider) Name() string {
@@ -91,7 +94,7 @@ func (p *tarballImageProvider) Provide(_ context.Context) (*image.Image, error) 
 		return nil, err
 	}
 
-	out := image.New(img, p.tmpDirGen, contentTempDir, metadata...)
+	out := image.New(img, p.tmpDirGen, contentTempDir, metadata...).WithPathFilterFunc(p.pathFilterFunc)
 	err = out.Read()
 	if err != nil {
 		return nil, err

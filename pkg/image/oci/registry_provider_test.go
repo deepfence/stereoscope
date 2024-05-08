@@ -20,6 +20,7 @@ import (
 
 	"github.com/anchore/stereoscope/pkg/file"
 	"github.com/anchore/stereoscope/pkg/image"
+	"github.com/anchore/stereoscope/pkg/pathfilter"
 )
 
 func Test_RegistryProvider(t *testing.T) {
@@ -33,7 +34,7 @@ func Test_RegistryProvider(t *testing.T) {
 	defer generator.Cleanup()
 
 	options := image.RegistryOptions{}
-	provider := NewRegistryProvider(&generator, options, fmt.Sprintf("%s/%s:%s", registryHost, imageName, imageTag), nil)
+	provider := NewRegistryProvider(&generator, options, fmt.Sprintf("%s/%s:%s", registryHost, imageName, imageTag), nil, pathfilter.DefaultPathFilterFunc)
 	img, err := provider.Provide(context.TODO())
 	assert.NoError(t, err)
 	assert.NotNil(t, img)
@@ -48,7 +49,7 @@ func Test_NewProviderFromRegistry(t *testing.T) {
 	platform := &image.Platform{}
 
 	//WHEN
-	provider := NewRegistryProvider(&generator, options, imageStr, platform).(*registryImageProvider)
+	provider := NewRegistryProvider(&generator, options, imageStr, platform, pathfilter.DefaultPathFilterFunc).(*registryImageProvider)
 
 	//THEN
 	assert.NotNil(t, provider.imageStr)
@@ -72,7 +73,7 @@ func Test_Registry_Provide_FailsUnauthorized(t *testing.T) {
 		},
 	}
 	platform := &image.Platform{}
-	provider := NewRegistryProvider(&generator, options, imageStr, platform)
+	provider := NewRegistryProvider(&generator, options, imageStr, platform, pathfilter.DefaultPathFilterFunc)
 	ctx := context.Background()
 
 	//WHEN
@@ -92,7 +93,7 @@ func Test_Registry_Provide_FailsImageMissingPlatform(t *testing.T) {
 		InsecureSkipTLSVerify: true,
 	}
 	platform := &image.Platform{}
-	provider := NewRegistryProvider(&generator, options, imageStr, platform)
+	provider := NewRegistryProvider(&generator, options, imageStr, platform, pathfilter.DefaultPathFilterFunc)
 	ctx := context.Background()
 
 	//WHEN
@@ -115,7 +116,7 @@ func Test_DockerMainRegistry_Provide(t *testing.T) {
 		OS:           "linux",
 		Architecture: "amd64",
 	}
-	provider := NewRegistryProvider(&generator, options, imageStr, platform)
+	provider := NewRegistryProvider(&generator, options, imageStr, platform, pathfilter.DefaultPathFilterFunc)
 	ctx := context.Background()
 
 	//WHEN

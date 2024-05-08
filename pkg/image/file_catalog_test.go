@@ -25,6 +25,7 @@ import (
 
 	"github.com/anchore/stereoscope/pkg/file"
 	"github.com/anchore/stereoscope/pkg/filetree"
+	"github.com/anchore/stereoscope/pkg/pathfilter"
 )
 
 const (
@@ -222,7 +223,7 @@ func TestFileCatalog_GetByExtension(t *testing.T) {
 	// we don't need the index itself, just the side effect on the file catalog after indexing
 	_, err := file.NewTarIndex(
 		fixtureTarFile.Name(),
-		layerTarIndexer(ft, fileCatalog, &size, nil, nil),
+		layerTarIndexer(ft, fileCatalog, &size, nil, nil, pathfilter.DefaultPathFilterFunc),
 	)
 	require.NoError(t, err)
 
@@ -389,7 +390,7 @@ func TestFileCatalog_GetByBasename(t *testing.T) {
 	// we don't need the index itself, just the side effect on the file catalog after indexing
 	_, err := file.NewTarIndex(
 		fixtureTarFile.Name(),
-		layerTarIndexer(ft, fileCatalog, &size, nil, nil),
+		layerTarIndexer(ft, fileCatalog, &size, nil, nil, pathfilter.DefaultPathFilterFunc),
 	)
 	require.NoError(t, err)
 
@@ -493,7 +494,7 @@ func TestFileCatalog_GetByBasenameGlob(t *testing.T) {
 	// we don't need the index itself, just the side effect on the file catalog after indexing
 	_, err := file.NewTarIndex(
 		fixtureTarFile.Name(),
-		layerTarIndexer(ft, fileCatalog, &size, nil, nil),
+		layerTarIndexer(ft, fileCatalog, &size, nil, nil, pathfilter.DefaultPathFilterFunc),
 	)
 	require.NoError(t, err)
 
@@ -605,7 +606,7 @@ func TestFileCatalog_GetByMimeType(t *testing.T) {
 	// we don't need the index itself, just the side effect on the file catalog after indexing
 	_, err := file.NewTarIndex(
 		fixtureTarFile.Name(),
-		layerTarIndexer(ft, fileCatalog, &size, nil, nil),
+		layerTarIndexer(ft, fileCatalog, &size, nil, nil, pathfilter.DefaultPathFilterFunc),
 	)
 	require.NoError(t, err)
 
@@ -706,7 +707,7 @@ func TestFileCatalog_GetBasenames(t *testing.T) {
 	// we don't need the index itself, just the side effect on the file catalog after indexing
 	_, err := file.NewTarIndex(
 		fixtureTarFile.Name(),
-		layerTarIndexer(ft, fileCatalog, &size, nil, nil),
+		layerTarIndexer(ft, fileCatalog, &size, nil, nil, pathfilter.DefaultPathFilterFunc),
 	)
 	require.NoError(t, err)
 

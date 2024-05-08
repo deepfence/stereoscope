@@ -14,6 +14,7 @@ import (
 	"github.com/anchore/stereoscope/internal/log"
 	"github.com/anchore/stereoscope/pkg/file"
 	"github.com/anchore/stereoscope/pkg/image"
+	"github.com/anchore/stereoscope/pkg/pathfilter"
 )
 
 var rootTempDirGenerator = file.NewTempDirGenerator("stereoscope")
@@ -64,6 +65,13 @@ func WithPlatform(platform string) Option {
 	}
 }
 
+func WithPathFilterFunc(fn pathfilter.PathFilterFunc) Option {
+	return func(c *config) error {
+		c.PathFilterFunc = fn
+		return nil
+	}
+}
+
 // GetImage parses the user provided image string and provides an image object;
 // note: the source where the image should be referenced from is automatically inferred.
 func GetImage(ctx context.Context, imgStr string, options ...Option) (*image.Image, error) {
@@ -92,9 +100,10 @@ func getImageFromSource(ctx context.Context, imgStr string, source image.Source,
 	// select image provider
 	providers := collections.TaggedValueSet[image.Provider]{}.Join(
 		ImageProviders(ImageProviderConfig{
-			UserInput: imgStr,
-			Platform:  cfg.Platform,
-			Registry:  cfg.Registry,
+			UserInput:      imgStr,
+			Platform:       cfg.Platform,
+			Registry:       cfg.Registry,
+			PathFilterFunc: cfg.PathFilterFunc,
 		})...,
 	)
 	if source != "" {

@@ -9,6 +9,7 @@ import (
 	"github.com/anchore/stereoscope/pkg/image/oci"
 	"github.com/anchore/stereoscope/pkg/image/podman"
 	"github.com/anchore/stereoscope/pkg/image/sif"
+	"github.com/anchore/stereoscope/pkg/pathfilter"
 )
 
 const (
@@ -21,27 +22,28 @@ const (
 
 // ImageProviderConfig is the uber-configuration containing all configuration needed by stereoscope image providers
 type ImageProviderConfig struct {
-	UserInput string
-	Platform  *image.Platform
-	Registry  image.RegistryOptions
+	UserInput      string
+	Platform       *image.Platform
+	Registry       image.RegistryOptions
+	PathFilterFunc pathfilter.PathFilterFunc
 }
 
 func ImageProviders(cfg ImageProviderConfig) []collections.TaggedValue[image.Provider] {
 	tempDirGenerator := rootTempDirGenerator.NewGenerator()
 	return []collections.TaggedValue[image.Provider]{
 		// file providers
-		taggedProvider(docker.NewArchiveProvider(tempDirGenerator, cfg.UserInput), FileTag),
-		taggedProvider(oci.NewArchiveProvider(tempDirGenerator, cfg.UserInput), FileTag),
-		taggedProvider(oci.NewDirectoryProvider(tempDirGenerator, cfg.UserInput), FileTag, DirTag),
-		taggedProvider(sif.NewArchiveProvider(tempDirGenerator, cfg.UserInput), FileTag),
+		taggedProvider(docker.NewArchiveProvider(tempDirGenerator, cfg.UserInput, cfg.PathFilterFunc), FileTag),
+		taggedProvider(oci.NewArchiveProvider(tempDirGenerator, cfg.UserInput, cfg.PathFilterFunc), FileTag),
+		taggedProvider(oci.NewDirectoryProvider(tempDirGenerator, cfg.UserInput, cfg.PathFilterFunc), FileTag, DirTag),
+		taggedProvider(sif.NewArchiveProvider(tempDirGenerator, cfg.UserInput, cfg.PathFilterFunc), FileTag),
 
 		// daemon providers
-		taggedProvider(docker.NewDaemonProvider(tempDirGenerator, cfg.UserInput, cfg.Platform), DaemonTag, PullTag),
-		taggedProvider(podman.NewDaemonProvider(tempDirGenerator, cfg.UserInput, cfg.Platform), DaemonTag, PullTag),
-		taggedProvider(containerd.NewDaemonProvider(tempDirGenerator, cfg.Registry, containerdClient.Namespace(), cfg.UserInput, cfg.Platform), DaemonTag, PullTag),
+		taggedProvider(docker.NewDaemonProvider(tempDirGenerator, cfg.UserInput, cfg.Platform, cfg.PathFilterFunc), DaemonTag, PullTag),
+		taggedProvider(podman.NewDaemonProvider(tempDirGenerator, cfg.UserInput, cfg.Platform, cfg.PathFilterFunc), DaemonTag, PullTag),
+		taggedProvider(containerd.NewDaemonProvider(tempDirGenerator, cfg.Registry, containerdClient.Namespace(), cfg.UserInput, cfg.Platform, cfg.PathFilterFunc), DaemonTag, PullTag),
 
 		// registry providers
-		taggedProvider(oci.NewRegistryProvider(tempDirGenerator, cfg.Registry, cfg.UserInput, cfg.Platform), RegistryTag, PullTag),
+		taggedProvider(oci.NewRegistryProvider(tempDirGenerator, cfg.Registry, cfg.UserInput, cfg.Platform, cfg.PathFilterFunc), RegistryTag, PullTag),
 	}
 }
 

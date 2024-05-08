@@ -28,25 +28,28 @@ import (
 	"github.com/anchore/stereoscope/pkg/event"
 	"github.com/anchore/stereoscope/pkg/file"
 	"github.com/anchore/stereoscope/pkg/image"
+	"github.com/anchore/stereoscope/pkg/pathfilter"
 )
 
 const Daemon image.Source = image.DockerDaemonSource
 
 // NewDaemonProvider creates a new provider instance for a specific image that will later be cached to the given directory
-func NewDaemonProvider(tmpDirGen *file.TempDirGenerator, imageStr string, platform *image.Platform) image.Provider {
-	return NewAPIClientProvider(Daemon, tmpDirGen, imageStr, platform, func() (client.APIClient, error) {
-		return docker.GetClient()
-	})
+func NewDaemonProvider(tmpDirGen *file.TempDirGenerator, imageStr string, platform *image.Platform, pathFilterFunc pathfilter.PathFilterFunc) image.Provider {
+	return NewAPIClientProvider(Daemon, tmpDirGen, imageStr, platform, pathFilterFunc,
+		func() (client.APIClient, error) {
+			return docker.GetClient()
+		})
 }
 
 // NewAPIClientProvider creates a new provider for the provided Docker client.APIClient
-func NewAPIClientProvider(name string, tmpDirGen *file.TempDirGenerator, imageStr string, platform *image.Platform, newClient apiClientCreator) image.Provider {
+func NewAPIClientProvider(name string, tmpDirGen *file.TempDirGenerator, imageStr string, platform *image.Platform, pathFilterFunc pathfilter.PathFilterFunc, newClient apiClientCreator) image.Provider {
 	return &daemonImageProvider{
-		name:         name,
-		tmpDirGen:    tmpDirGen,
-		newAPIClient: newClient,
-		imageStr:     imageStr,
-		platform:     platform,
+		name:           name,
+		tmpDirGen:      tmpDirGen,
+		newAPIClient:   newClient,
+		imageStr:       imageStr,
+		platform:       platform,
+		pathFilterFunc: pathFilterFunc,
 	}
 }
 
@@ -54,11 +57,12 @@ type apiClientCreator func() (client.APIClient, error)
 
 // daemonImageProvider is an image.Provider capable of fetching and representing a docker image from the docker daemon API
 type daemonImageProvider struct {
-	name         string
-	tmpDirGen    *file.TempDirGenerator
-	newAPIClient apiClientCreator
-	imageStr     string
-	platform     *image.Platform
+	name           string
+	tmpDirGen      *file.TempDirGenerator
+	newAPIClient   apiClientCreator
+	imageStr       string
+	platform       *image.Platform
+	pathFilterFunc pathfilter.PathFilterFunc
 }
 
 func (p *daemonImageProvider) Name() string {
@@ -277,7 +281,7 @@ func (p *daemonImageProvider) Provide(ctx context.Context) (*image.Image, error)
 	}
 
 	// use the existing tarball provider to process what was pulled from the docker daemon
-	return NewArchiveProvider(p.tmpDirGen, tarFileName, withInspectMetadata(inspectResult)...).
+	return NewArchiveProvider(p.tmpDirGen, tarFileName, p.pathFilterFunc, withInspectMetadata(inspectResult)...).
 		Provide(ctx)
 }
 

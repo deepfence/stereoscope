@@ -19,6 +19,7 @@ import (
 	"github.com/anchore/stereoscope/pkg/event"
 	"github.com/anchore/stereoscope/pkg/file"
 	"github.com/anchore/stereoscope/pkg/filetree"
+	"github.com/anchore/stereoscope/pkg/pathfilter"
 )
 
 // Image represents a container image.
@@ -40,6 +41,8 @@ type Image struct {
 	SquashedSearchContext filetree.Searcher
 
 	overrideMetadata []AdditionalMetadata
+
+	pathFilterFunc pathfilter.PathFilterFunc
 }
 
 type AdditionalMetadata func(*Image) error
@@ -159,6 +162,11 @@ func New(image v1.Image, tmpDirGen *file.TempDirGenerator, contentCacheDir strin
 	return imgObj
 }
 
+func (i *Image) WithPathFilterFunc(fn pathfilter.PathFilterFunc) *Image {
+	i.pathFilterFunc = fn
+	return i
+}
+
 func (i *Image) IDs() []string {
 	var ids = make([]string, len(i.Metadata.Tags))
 	for idx, t := range i.Metadata.Tags {
@@ -223,7 +231,7 @@ func (i *Image) Read() error {
 	fileCatalog := NewFileCatalog()
 
 	for idx, v1Layer := range v1Layers {
-		layer := NewLayer(v1Layer)
+		layer := NewLayer(v1Layer).WithPathFilterFunc(i.pathFilterFunc)
 		err := layer.Read(fileCatalog, idx, i.contentCacheDir)
 		if err != nil {
 			return err

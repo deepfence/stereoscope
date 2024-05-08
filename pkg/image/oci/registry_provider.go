@@ -15,17 +15,19 @@ import (
 	"github.com/anchore/stereoscope/internal/log"
 	"github.com/anchore/stereoscope/pkg/file"
 	"github.com/anchore/stereoscope/pkg/image"
+	"github.com/anchore/stereoscope/pkg/pathfilter"
 )
 
 const Registry image.Source = image.OciRegistrySource
 
 // NewRegistryProvider creates a new provider instance for a specific image that will later be cached to the given directory.
-func NewRegistryProvider(tmpDirGen *file.TempDirGenerator, registryOptions image.RegistryOptions, imageStr string, platform *image.Platform) image.Provider {
+func NewRegistryProvider(tmpDirGen *file.TempDirGenerator, registryOptions image.RegistryOptions, imageStr string, platform *image.Platform, pathFilterFunc pathfilter.PathFilterFunc) image.Provider {
 	return &registryImageProvider{
 		tmpDirGen:       tmpDirGen,
 		imageStr:        imageStr,
 		platform:        platform,
 		registryOptions: registryOptions,
+		pathFilterFunc:  pathFilterFunc,
 	}
 }
 
@@ -35,6 +37,7 @@ type registryImageProvider struct {
 	imageStr        string
 	platform        *image.Platform
 	registryOptions image.RegistryOptions
+	pathFilterFunc  pathfilter.PathFilterFunc
 }
 
 func (p *registryImageProvider) Name() string {
@@ -89,7 +92,7 @@ func (p *registryImageProvider) Provide(ctx context.Context) (*image.Image, erro
 		)
 	}
 
-	out := image.New(img, p.tmpDirGen, imageTempDir, metadata...)
+	out := image.New(img, p.tmpDirGen, imageTempDir, metadata...).WithPathFilterFunc(p.pathFilterFunc)
 	err = out.Read()
 	if err != nil {
 		return nil, err

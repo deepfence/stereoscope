@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/anchore/stereoscope/pkg/file"
+	"github.com/anchore/stereoscope/pkg/pathfilter"
 )
 
 func Test_NewProviderFromTarball(t *testing.T) {
@@ -16,7 +17,7 @@ func Test_NewProviderFromTarball(t *testing.T) {
 	defer generator.Cleanup()
 
 	//WHEN
-	provider := NewArchiveProvider(&generator, path).(*tarballImageProvider)
+	provider := NewArchiveProvider(&generator, path, pathfilter.DefaultPathFilterFunc).(*tarballImageProvider)
 
 	//THEN
 	assert.NotNil(t, provider.path)
@@ -28,7 +29,7 @@ func Test_TarballProvide(t *testing.T) {
 	generator := file.NewTempDirGenerator("tempDir")
 	defer generator.Cleanup()
 
-	provider := NewArchiveProvider(generator, "test-fixtures/valid-oci.tar")
+	provider := NewArchiveProvider(generator, "test-fixtures/valid-oci.tar", pathfilter.DefaultPathFilterFunc)
 
 	//WHEN
 	image, err := provider.Provide(context.TODO())
@@ -43,7 +44,7 @@ func Test_TarballProvide_Fails(t *testing.T) {
 	generator := file.NewTempDirGenerator("tempDir")
 	defer generator.Cleanup()
 
-	provider := NewArchiveProvider(generator, "")
+	provider := NewArchiveProvider(generator, "", pathfilter.DefaultPathFilterFunc)
 
 	//WHEN
 	image, err := provider.Provide(context.TODO())
